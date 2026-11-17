@@ -1,3 +1,4 @@
+
 from ollama import Client
 import json
 
@@ -6,34 +7,45 @@ client = Client(
 )
 
 SYSTEM_PROMPT = """
-    You're an expert AI Assistant in resolving user queries using chain of thought.
-    You work on START, PLAN and OUTPUT steps.
-    You need to first PLAN what needs to be done. The PLAN can be multiple steps.
-    Once you think enough PLAN has been done, finally you can give an OUTPUT.
+You are an expert AI assistant.
 
-    Rules:
-    - Strictly follow the given JSON output format.
-    - Only run one step at a time.
-    - The sequence of steps is START (where user gives an input), PLAN (that can be multiple times), and finally OUTPUT. (which is going to the displayed to the user).
+Follow these steps:
+1. START: The user's input, handled by the application.
+2. PLAN: Provide a short, high-level plan for solving the query.
+3. OUTPUT: Provide the final answer.
 
-    Output JSON Format:
-    { "step": "START" | "PLAN" | "OUTPUT", "content": "string"}
+Rules:
+- Return exactly one JSON object per response.
+- Every response must contain "step" and "content".
+- Never return an empty JSON object.
+- Never generate START yourself.
+- Only generate the step requested by the application.
+- Do not repeat previous steps.
+- For arithmetic, follow correct operator precedence.
+- Keep PLAN concise and OUTPUT accurate.
 
-    Example:
-    START: Hey, Can you solve 2 + 3 * 5 / 10
-    PLAN: {"step": "PLAN": "content":"Seems like user is interested in a math problem."}
-    PLAN: {"step": "PLAN": "content":"Looking at the problem, we should solve this using BODMAS method"}
-    PLAN: {"step": "PLAN": "content":"Yes, BODMAS is the correct thing to be done here."}
-    PLAN: {"step": "PLAN": "content":"First we must multiply 3 * 5 which is 15."}
-    PLAN: {"step": "PLAN": "content":"Now the new equation is 2 + 15 / 10."}
-    PLAN: {"step": "PLAN": "content":"We must perform divide that is 15 / 10 = 1.5."}
-    PLAN: {"step": "PLAN": "content":"Now the new equation is 2 + 1.5."}
-    PLAN: {"step": "PLAN": "content":"Now finally let's perform the add 3.5."}
-    PLAN: {"step": "PLAN": "content":"Great, we have solved and finally left with 3.5 as ans"}
-    OUTPUT: {"step": "OUTPUT": "content":"3.5"}
+JSON examples:
+
+{"step": "PLAN", "content": "Apply arithmetic operator precedence."}
+
+{"step": "OUTPUT", "content": "The answer is 3.5."}
 """
 
-print("\n\n\n")
+RESPONSE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "step": {
+            "type": "string",
+            "enum": ["PLAN", "OUTPUT"]
+        },
+        "content": {
+            "type": "string",
+            "minLength": 1
+        }
+    },
+    "required": ["step", "content"],
+    "additionalProperties": False
+}
 
 message_history = [
     {
@@ -42,6 +54,73 @@ message_history = [
     }
 ]
 
+
+def generate_step(expected_step):
+    max_retries = 3
+
+    for attempt in range(max_retries):
+        instruction = (
+            f"Generate the {expected_step} step now. "
+            "Return both step and content as valid JSON."
+        )
+
+        if attempt > 0:
+            instruction += (
+                " Your previous response did not match "
+                "the required structure or step."
+            )
+
+        messages = message_history + [
+            {
+                "role": "user",
+                "content": instruction
+            }
+        ]
+
+        response = client.chat(
+            model="gemma:2b",
+            messages=messages,
+            format=RESPONSE_SCHEMA,
+            options={
+                "temperature": 0
+            }
+        )
+
+        raw_result = response["message"]["content"]
+
+        print("RAW RESULT:", repr(raw_result))
+
+        try:
+            parsed_result = json.loads(raw_result)
+        except json.JSONDecodeError:
+            print("Invalid JSON response.")
+            continue
+
+        step = parsed_result.get("step")
+        content = parsed_result.get("content")
+
+        if (
+            step != expected_step
+            or not isinstance(content, str)
+            or not content.strip()
+        ):
+            print("Invalid step or missing content.")
+            continue
+
+        message_history.append({
+            "role": "assistant",
+            "content": raw_result
+        })
+
+        return content
+
+    raise RuntimeError(
+        f"Failed to generate a valid {expected_step} step."
+    )
+
+
+print("\n")
+
 user_query = input("➡️ ")
 
 message_history.append({
@@ -49,30 +128,16 @@ message_history.append({
     "content": user_query
 })
 
-while True:
-    response = client.chat(
-    model="gemma:2b",
-    format="json",
-    messages=message_history
-    )
-    raw_result = (response["message"]["content"])
-    message_history.append({"role": "assistant", "content": raw_result
-    })
-    print("RAW RESULT:", repr(raw_result))
-    print("RAW RESULT TYPE:", type(raw_result))
-    parsed_result = json.loads(raw_result)
+print("🚀 START:", user_query)
 
+try:
+    plan = generate_step("PLAN")
+    print("🧠 PLAN:", plan)
 
-    if parsed_result.get("step") == "START":
-            print("🚀", parsed_result.get("content"))
-            continue
+    output = generate_step("OUTPUT")
+    print("🤖 OUTPUT:", output)
 
-    if parsed_result.get("step") == "PLAN":
-        print("🧠", parsed_result.get("content"))
-        continue
+except RuntimeError as error:
+    print("Error:", error)
 
-    if parsed_result.get("step") == "OUTPUT":
-        print("🤖", parsed_result.get("content"))
-        break
-
-print("\n\n\n")
+print("\n")

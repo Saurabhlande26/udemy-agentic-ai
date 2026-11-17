@@ -14,6 +14,8 @@ def get_weather(city:str):
         return f"The weather in {city} is {response.text}"
 
     return f"something went wrong"
+
+
 def main():
     user_query = input("> ")
 
