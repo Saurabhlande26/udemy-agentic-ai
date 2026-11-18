@@ -55,25 +55,25 @@ while True:
         format = "json"
     messages = message_history
     )
-raw_result = (response["message"]["content"])
-message_history.append({
-    "role": "assistant", "content": raw_result
-})
-print("RAW RESULT:", repr(raw_result))
-print("RAW RESULT TYPE:", type(raw_result))
-parsed_result = json.loads(raw_result)
+    raw_result = (response["message"]["content"])
+    message_history.append({
+        "role": "assistant", "content": raw_result
+    })
+    print("RAW RESULT:", repr(raw_result))
+    print("RAW RESULT TYPE:", type(raw_result))
+    parsed_result = json.loads(raw_result)
 
 
-if parsed_result.get("step") == "START":
-    print("🚀", parsed_result.get("content"))
-continue
+    if parsed_result.get("step") == "START":
+        print("🚀", parsed_result.get("content"))
+    continue
 
-if parsed_result.get("step") == "PLAN":
-    print("🧠", parsed_result.get("content"))
-continue
+    if parsed_result.get("step") == "PLAN":
+        print("🧠", parsed_result.get("content"))
+    continue
 
-if parsed_result.get("step") == "OUTPUT":
-    print("🤖", parsed_result.get("content"))
-break
+    if parsed_result.get("step") == "OUTPUT":
+        print("🤖", parsed_result.get("content"))
+    break
 
 print("\n\n\n")
