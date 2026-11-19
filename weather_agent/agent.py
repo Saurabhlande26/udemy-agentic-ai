@@ -49,7 +49,20 @@ def write_file(data: str):
             return f"ERROR: Destination folder does not exist: {destination.parent}"
 
         if destination.exists():
-            return f"ERROR: File already exists; not overwritten: {destination}"
+            if not destination.is_file():
+                return f"ERROR: Path is not a regular file: {destination}"
+
+            existing_content = destination.read_text(encoding="utf-8")
+            if existing_content == content:
+                return f"File already contains the requested code: {destination}"
+
+            # Preserve previous work before retrying a code-generation request.
+            backup_path = destination.with_name(destination.name + ".backup")
+            if not backup_path.exists():
+                backup_path.write_text(existing_content, encoding="utf-8")
+
+            destination.write_text(content, encoding="utf-8")
+            return f"File updated successfully: {destination} (previous version: {backup_path})"
 
         destination.write_text(content, encoding="utf-8")
         return f"File created successfully: {destination}"
@@ -144,6 +157,8 @@ class MyOutoutFormat(BaseModel):
 
 
 print("\n\n\n")
+print("RUNNING AGENT:", Path(__file__).resolve())
+print("PROJECT DIRECTORY:", Path.cwd())
 
 message_history = [
     {
@@ -198,7 +213,7 @@ while True:
     rename_required = rename_match is not None
 
     app_required = bool(re.search(
-        r"\b(?:create|build|make)\b.*\b(?:app|project|website|webpage)\b.*\bhtml\b.*\bcss\b.*\b(?:js|javascript)\b",
+        r"\b(?:create|build|make)\b.*\b(?:todo|to-do|app|project|website|webpage)\b.*\bhtml\b.*\bcss\b.*\b(?:js|javascript)\b",
         user_query,
         re.IGNORECASE
     ))
